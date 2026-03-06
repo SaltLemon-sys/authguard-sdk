@@ -8,19 +8,21 @@ public class VerificationResult {
     private final String expiresAt;
     private final String ipUsage;
     private final String hwidUsage;
+    private final String discordUsername;
 
     public VerificationResult(boolean valid, String message, String productId, String expiresAt, String ipUsage,
-            String hwidUsage) {
+            String hwidUsage, String discordUsername) {
         this.valid = valid;
         this.message = message;
         this.productId = productId;
         this.expiresAt = expiresAt;
         this.ipUsage = ipUsage;
         this.hwidUsage = hwidUsage;
+        this.discordUsername = discordUsername;
     }
 
     public VerificationResult(boolean valid, String message) {
-        this(valid, message, null, null, null, null);
+        this(valid, message, null, null, null, null, null);
     }
 
     public boolean isValid() {
@@ -45,5 +47,9 @@ public class VerificationResult {
 
     public String getHwidUsage() {
         return hwidUsage;
+    }
+
+    public String getDiscordUsername() {
+        return discordUsername;
     }
 }

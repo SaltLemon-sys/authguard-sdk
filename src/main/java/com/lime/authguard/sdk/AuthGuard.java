@@ -1,6 +1,7 @@
 package com.lime.authguard.sdk;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -40,7 +41,7 @@ public final class AuthGuard {
 
         Bukkit.getConsoleSender()
                 .sendMessage("§8§m                                                                          ");
-        Bukkit.getConsoleSender().sendMessage("§b  Product: §f" + productName + " §8| §b License Verification");
+        Bukkit.getConsoleSender().sendMessage("§b  Product: §f" + productName + " §8| §bLicense Verification");
         Bukkit.getConsoleSender()
                 .sendMessage("§8§m                                                                          ");
 
@@ -62,6 +63,9 @@ public final class AuthGuard {
                 Bukkit.getConsoleSender().sendMessage("");
                 Bukkit.getConsoleSender().sendMessage("§a  ✅ License verified successfully!");
                 Bukkit.getConsoleSender().sendMessage("§a  Product: §f" + productName);
+                if (result.getDiscordUsername() != null) {
+                    Bukkit.getConsoleSender().sendMessage("§a  Licensed to: §f" + result.getDiscordUsername());
+                }
                 if (result.getExpiresAt() != null) {
                     Bukkit.getConsoleSender().sendMessage("§a  Expires: §f" + result.getExpiresAt());
                 }
@@ -191,25 +195,45 @@ public final class AuthGuard {
             boolean valid = json.has("valid") && json.get("valid").getAsBoolean();
             String message = json.has("message") ? json.get("message").getAsString() : "Unknown";
 
-            if (valid && json.has("license")) {
+            if (json.has("license")) {
                 JsonObject license = json.getAsJsonObject("license");
-                String productId = license.has("productId") ? license.get("productId").getAsString() : null;
-                String expiresAt = license.has("expiresAt") && !license.get("expiresAt").isJsonNull()
-                        ? license.get("expiresAt").getAsString()
-                        : "Lifetime";
-                String ipUsage = license.has("ipUsage") ? license.get("ipUsage").getAsString() : null;
-                String hwidUsage = license.has("hwidUsage") ? license.get("hwidUsage").getAsString() : null;
-                return new VerificationResult(true, message, productId, expiresAt, ipUsage, hwidUsage);
+                String productId = getJsonString(license, "productId");
+                String expiresAt = getJsonString(license, "expiresAt");
+                if (expiresAt == null)
+                    expiresAt = "Lifetime";
+                String discordUsername = getJsonString(license, "discordUsername");
+
+                String ipUsage = getJsonString(license, "ipUsage");
+                if (ipUsage == null && license.has("activeIps") && license.has("ipLimit")) {
+                    int ipCount = 0;
+                    if (license.get("activeIps").isJsonArray()) {
+                        ipCount = license.getAsJsonArray("activeIps").size();
+                    }
+                    int ipLimit = license.get("ipLimit").getAsInt();
+                    ipUsage = ipCount + "/" + ipLimit;
+                }
+
+                String hwidUsage = getJsonString(license, "hwidUsage");
+
+                return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage,
+                        discordUsername);
             }
 
-            String productId = json.has("product_id") ? json.get("product_id").getAsString() : null;
-            String expiresAt = json.has("expires_at") ? json.get("expires_at").getAsString() : null;
-            String ipUsage = json.has("ip_usage") ? json.get("ip_usage").getAsString() : null;
-            String hwidUsage = json.has("hwid_usage") ? json.get("hwid_usage").getAsString() : null;
+            String productId = getJsonString(json, "product_id");
+            String expiresAt = getJsonString(json, "expires_at");
+            String ipUsage = getJsonString(json, "ip_usage");
+            String hwidUsage = getJsonString(json, "hwid_usage");
 
-            return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage);
+            return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage, null);
         } catch (Exception e) {
             return new VerificationResult(false, "Failed to parse server response");
         }
+    }
+
+    private static String getJsonString(JsonObject json, String key) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            return json.get(key).getAsString();
+        }
+        return null;
     }
 }
