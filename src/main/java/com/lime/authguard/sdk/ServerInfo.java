@@ -3,15 +3,18 @@ package com.lime.authguard.sdk;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.UUID;
 
 public class ServerInfo {
 
@@ -47,7 +50,7 @@ public class ServerInfo {
         String serverVersion = Bukkit.getVersion();
         String pluginVersion = plugin.getDescription().getVersion();
         String macAddress = resolveMacAddress();
-        String hwid = generateHwid(macAddress);
+        String hwid = loadOrGenerateHwid(plugin);
         String operatingSystem = System.getProperty("os.name");
         String osVersion = System.getProperty("os.version");
         String osArch = System.getProperty("os.arch");
@@ -150,14 +153,37 @@ public class ServerInfo {
         return "unknown";
     }
 
-    private static String generateHwid(String macAddress) {
+    private static String loadOrGenerateHwid(JavaPlugin plugin) {
         try {
-            String allMacs = resolveAllMacs();
-            String raw = allMacs + "|" + System.getProperty("os.name") + "|" +
-                    System.getProperty("os.arch") + "|" + System.getProperty("user.name") + "|" +
-                    Runtime.getRuntime().availableProcessors();
+            File dataFolder = plugin.getDataFolder();
+            if (!dataFolder.exists()) {
+                dataFolder.mkdirs();
+            }
+            File hwidFile = new File(dataFolder, ".hwid");
+            if (hwidFile.exists()) {
+                String saved = Files.readString(hwidFile.toPath(), StandardCharsets.UTF_8).trim();
+                if (!saved.isEmpty() && !saved.equals("unknown")) {
+                    return saved;
+                }
+            }
+            String hwid = generateHwid();
+            Files.writeString(hwidFile.toPath(), hwid, StandardCharsets.UTF_8);
+            return hwid;
+        } catch (Exception e) {
+            return generateHwid();
+        }
+    }
+
+    private static String generateHwid() {
+        try {
+            String seed = UUID.randomUUID().toString() + "|" +
+                    System.getProperty("os.name") + "|" +
+                    System.getProperty("os.arch") + "|" +
+                    System.getProperty("user.name") + "|" +
+                    Runtime.getRuntime().availableProcessors() + "|" +
+                    System.nanoTime();
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = digest.digest(seed.getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);
@@ -167,7 +193,7 @@ public class ServerInfo {
             }
             return hexString.toString();
         } catch (Exception e) {
-            return "unknown";
+            return UUID.randomUUID().toString().replace("-", "");
         }
     }
 
