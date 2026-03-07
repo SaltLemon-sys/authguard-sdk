@@ -8,7 +8,10 @@ import java.net.NetworkInterface;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.List;
 
 public class ServerInfo {
 
@@ -91,6 +94,7 @@ public class ServerInfo {
 
     private static String resolveMacAddress() {
         try {
+            List<String> macs = new ArrayList<>();
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
@@ -105,8 +109,41 @@ public class ServerInfo {
                         if (i < mac.length - 1)
                             sb.append(":");
                     }
-                    return sb.toString();
+                    macs.add(sb.toString());
                 }
+            }
+            if (!macs.isEmpty()) {
+                Collections.sort(macs);
+                return macs.get(0);
+            }
+        } catch (Exception ignored) {
+        }
+        return "unknown";
+    }
+
+    private static String resolveAllMacs() {
+        try {
+            List<String> macs = new ArrayList<>();
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (networkInterface.isLoopback() || networkInterface.isVirtual()) {
+                    continue;
+                }
+                byte[] mac = networkInterface.getHardwareAddress();
+                if (mac != null && mac.length > 0) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < mac.length; i++) {
+                        sb.append(String.format("%02X", mac[i]));
+                        if (i < mac.length - 1)
+                            sb.append(":");
+                    }
+                    macs.add(sb.toString());
+                }
+            }
+            if (!macs.isEmpty()) {
+                Collections.sort(macs);
+                return String.join("+", macs);
             }
         } catch (Exception ignored) {
         }
@@ -115,7 +152,8 @@ public class ServerInfo {
 
     private static String generateHwid(String macAddress) {
         try {
-            String raw = macAddress + "|" + System.getProperty("os.name") + "|" +
+            String allMacs = resolveAllMacs();
+            String raw = allMacs + "|" + System.getProperty("os.name") + "|" +
                     System.getProperty("os.arch") + "|" + System.getProperty("user.name") + "|" +
                     Runtime.getRuntime().availableProcessors();
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
