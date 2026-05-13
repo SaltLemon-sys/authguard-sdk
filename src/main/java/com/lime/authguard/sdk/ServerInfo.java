@@ -47,7 +47,7 @@ public class ServerInfo {
         String serverVersion = Bukkit.getVersion();
         String pluginVersion = plugin.getDescription().getVersion();
         String macAddress = resolveMacAddress();
-        String hwid = generateHwid();
+        String hwid = generateHwid(serverIp, serverPort);
         String operatingSystem = System.getProperty("os.name");
         String osVersion = System.getProperty("os.version");
         String osArch = System.getProperty("os.arch");
@@ -150,13 +150,9 @@ public class ServerInfo {
         return "unknown";
     }
 
-    private static String generateHwid() {
+    private static String generateHwid(String serverIp, int serverPort) {
         try {
-            String raw = System.getProperty("os.name", "") +
-                    System.getProperty("os.arch", "") +
-                    System.getProperty("user.name", "") +
-                    System.getProperty("os.version", "") +
-                    InetAddress.getLocalHost().getHostName();
+            String raw = (serverIp != null ? serverIp : "unknown") + ":" + serverPort;
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
