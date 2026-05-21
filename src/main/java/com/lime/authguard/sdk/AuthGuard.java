@@ -10,7 +10,10 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.logging.Logger;
 
 public final class AuthGuard {
@@ -122,7 +125,12 @@ public final class AuthGuard {
             String baseUrl = authServerUrl.endsWith("/") ? authServerUrl.substring(0, authServerUrl.length() - 1)
                     : authServerUrl;
             String queryString = serverInfo.toQueryString(licenseKey, productId);
-            URL url = new URL(baseUrl + "/api/v1/verify?" + queryString);
+
+            // Generate a cryptographic nonce for signed response verification
+            String nonce = generateNonce();
+            String fullQuery = queryString + "&nonce=" + URLEncoder.encode(nonce, StandardCharsets.UTF_8);
+
+            URL url = new URL(baseUrl + "/api/v1/verify?" + fullQuery);
 
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
@@ -140,7 +148,7 @@ public final class AuthGuard {
                 responseBody = readErrorStream(connection);
             }
 
-            return parseResponse(responseBody);
+            return parseResponse(responseBody, nonce, baseUrl);
         } catch (Exception e) {
             throw new AuthGuardException("Failed to connect to auth server: " + e.getMessage(), e);
         } finally {
@@ -188,12 +196,28 @@ public final class AuthGuard {
         }
     }
 
-    private static VerificationResult parseResponse(String responseBody) {
+    private static VerificationResult parseResponse(String responseBody, String nonce, String serverUrl) {
         try {
             JsonObject json = GSON.fromJson(responseBody, JsonObject.class);
 
             boolean valid = json.has("valid") && json.get("valid").getAsBoolean();
             String message = json.has("message") ? json.get("message").getAsString() : "Unknown";
+
+            // Run signed nonce verification if the license itself is valid
+            boolean signatureVerified = false;
+            if (valid) {
+                SignatureResult sigResult = SignatureVerifier.verify(json, nonce, serverUrl, 0);
+                if (sigResult.isServerSupportsSignature()) {
+                    if (sigResult.isVerified()) {
+                        signatureVerified = true;
+                    } else {
+                        // Server supports signing but verification failed — do not trust this response
+                        return new VerificationResult(false,
+                                "Response signature verification failed: " + sigResult.getFailureReason());
+                    }
+                }
+                // If server doesn't support signing, we still allow the basic validation (backward compat)
+            }
 
             if (json.has("license")) {
                 JsonObject license = json.getAsJsonObject("license");
@@ -216,7 +240,7 @@ public final class AuthGuard {
                 String hwidUsage = getJsonString(license, "hwidUsage");
 
                 return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage,
-                        discordUsername);
+                        discordUsername, signatureVerified);
             }
 
             String productId = getJsonString(json, "product_id");
@@ -224,7 +248,7 @@ public final class AuthGuard {
             String ipUsage = getJsonString(json, "ip_usage");
             String hwidUsage = getJsonString(json, "hwid_usage");
 
-            return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage, null);
+            return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage, null, signatureVerified);
         } catch (Exception e) {
             return new VerificationResult(false, "Failed to parse server response");
         }
@@ -235,5 +259,14 @@ public final class AuthGuard {
             return json.get(key).getAsString();
         }
         return null;
+    }
+
+    /**
+     * Generates a cryptographic random nonce (32 bytes, Base64URL encoded).
+     */
+    private static String generateNonce() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }
