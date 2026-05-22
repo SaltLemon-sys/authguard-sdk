@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ServerInfo {
 
@@ -150,19 +151,24 @@ public class ServerInfo {
         return "unknown";
     }
 
+    // Cache HWIDs by IP:Port — same IP:Port always returns same HWID
+    private static final ConcurrentHashMap<String, String> hwidCache = new ConcurrentHashMap<>();
+
     private static String generateHwid(String serverIp, int serverPort) {
-        try {
-            String raw = (serverIp != null ? serverIp : "unknown") + ":" + serverPort;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder();
-            for (int i = 0; i < 8 && i < hash.length; i++) {
-                hexString.append(String.format("%02x", hash[i]));
+        String cacheKey = (serverIp != null ? serverIp : "unknown") + ":" + serverPort;
+        return hwidCache.computeIfAbsent(cacheKey, key -> {
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                byte[] hash = digest.digest(key.getBytes(StandardCharsets.UTF_8));
+                StringBuilder hexString = new StringBuilder();
+                for (int i = 0; i < 8 && i < hash.length; i++) {
+                    hexString.append(String.format("%02x", hash[i]));
+                }
+                return hexString.toString();
+            } catch (Exception e) {
+                return "unknown";
             }
-            return hexString.toString();
-        } catch (Exception e) {
-            return "unknown";
-        }
+        });
     }
 
     public String getServerIp() {
