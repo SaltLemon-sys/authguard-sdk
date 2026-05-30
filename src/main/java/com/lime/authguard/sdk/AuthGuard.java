@@ -1,7 +1,6 @@
 package com.lime.authguard.sdk;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -250,7 +249,9 @@ public final class AuthGuard {
 
             return new VerificationResult(valid, message, productId, expiresAt, ipUsage, hwidUsage, null, signatureVerified);
         } catch (Exception e) {
-            return new VerificationResult(false, "Failed to parse server response");
+            return new VerificationResult(false,
+                    "Failed to parse server response: " + e.getClass().getSimpleName() + " - " + e.getMessage()
+                            + " | Response: " + abbreviate(responseBody, 300));
         }
     }
 
@@ -259,6 +260,17 @@ public final class AuthGuard {
             return json.get(key).getAsString();
         }
         return null;
+    }
+
+    private static String abbreviate(String value, int maxLength) {
+        if (value == null) {
+            return "null";
+        }
+        String normalized = value.replace("\r", "").replace("\n", "");
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength) + "...";
     }
 
     /**
